@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface TocItem {
   id: string;
@@ -39,6 +39,7 @@ function extractHeadings(html: string): TocItem[] {
 export function TableOfContents({ html }: TableOfContentsProps) {
   const [activeId, setActiveId] = useState<string>("");
   const headings = extractHeadings(html);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const handleScroll = useCallback(() => {
     const headingElements = headings
@@ -48,7 +49,7 @@ export function TableOfContents({ html }: TableOfContentsProps) {
     let currentId = "";
     for (const el of headingElements) {
       const rect = el.getBoundingClientRect();
-      if (rect.top <= 100) {
+      if (rect.top <= 120) {
         currentId = el.id;
       }
     }
@@ -61,34 +62,67 @@ export function TableOfContents({ html }: TableOfContentsProps) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
+  // Scroll active TOC item into view ONLY within the toc-list container
+  // Using scrollTop instead of scrollIntoView to avoid moving the page
+  useEffect(() => {
+    if (!listRef.current || !activeId) return;
+
+    const list = listRef.current;
+    const activeEl = list.querySelector<HTMLElement>(`[data-id="${activeId}"]`);
+    if (!activeEl) return;
+
+    const listRect = list.getBoundingClientRect();
+    const itemRect = activeEl.getBoundingClientRect();
+
+    // Item is below the visible area — scroll down
+    if (itemRect.bottom > listRect.bottom) {
+      list.scrollTop += itemRect.bottom - listRect.bottom + 20;
+    }
+    // Item is above the visible area — scroll up
+    else if (itemRect.top < listRect.top) {
+      list.scrollTop -= listRect.top - itemRect.top + 20;
+    }
+  }, [activeId]);
+
   if (headings.length === 0) return null;
 
   return (
     <nav className="toc" aria-label="Table of contents">
       <h4 className="toc-title">On This Page</h4>
-      <ul className="toc-list">
-        {headings.map((heading) => (
-          <li
-            key={heading.id}
-            className={`toc-item ${heading.level === 3 ? "toc-item-nested" : ""} ${
-              activeId === heading.id ? "toc-item-active" : ""
-            }`}
-          >
-            <a
-              href={`#${heading.id}`}
-              className="toc-link"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById(heading.id)?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                });
-              }}
+      <ul className="toc-list" ref={listRef}>
+        {headings.map((heading) => {
+          const isActive = activeId === heading.id;
+          return (
+            <li
+              key={heading.id}
+              data-id={heading.id}
+              className={`toc-item ${heading.level === 3 ? "toc-item-nested" : ""} ${
+                isActive ? "toc-item-active" : ""
+              }`}
             >
-              {heading.text}
-            </a>
-          </li>
-        ))}
+              <a
+                href={`#${heading.id}`}
+                className="toc-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const target = document.getElementById(heading.id);
+                  if (target) {
+                    const headerHeight = 64;
+                    const offset = 16;
+                    const top =
+                      target.getBoundingClientRect().top +
+                      window.scrollY -
+                      headerHeight -
+                      offset;
+                    window.scrollTo({ top, behavior: "smooth" });
+                  }
+                }}
+              >
+                {heading.text}
+              </a>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

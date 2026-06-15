@@ -13,13 +13,32 @@ interface BlogListClientProps {
 export function BlogListClient({ posts }: BlogListClientProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [showMobileControls, setShowMobileControls] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query.toLowerCase());
   }, []);
 
+  // Collect all unique labels from posts
+  const allCategories = useMemo(() => {
+    const labelSet = new Set<string>();
+    posts.forEach((p) => p.labels.forEach((l) => labelSet.add(l)));
+    return Array.from(labelSet).sort();
+  }, [posts]);
+
   const filteredPosts = useMemo(() => {
     let filtered = posts;
+
+    // Category filter
+    if (selectedCategory) {
+      filtered = filtered.filter((p) =>
+        p.labels.some(
+          (l) => l.toLowerCase() === selectedCategory.toLowerCase()
+        )
+      );
+    }
 
     // Search filter
     if (searchQuery) {
@@ -39,7 +58,7 @@ export function BlogListClient({ posts }: BlogListClientProps) {
     });
 
     return filtered;
-  }, [posts, searchQuery, sort]);
+  }, [posts, searchQuery, sort, selectedCategory]);
 
   // Group posts by year
   const groupedPosts = useMemo(() => {
@@ -62,12 +81,158 @@ export function BlogListClient({ posts }: BlogListClientProps) {
     <div className="blog-list-page">
       <div className="blog-list-header">
         <SearchBar onSearch={handleSearch} />
-        <SortToggle sort={sort} onSortChange={setSort} />
+
+        {/* Mobile toggle for sort/filter controls */}
+        <button
+          className="mobile-controls-toggle"
+          id="mobile-controls-toggle"
+          onClick={() => setShowMobileControls((v) => !v)}
+          aria-expanded={showMobileControls}
+          aria-label="Toggle filter controls"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="4" y1="6" x2="20" y2="6" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="18" x2="20" y2="18" />
+          </svg>
+          <span>Filters</span>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              transform: showMobileControls ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 0.2s ease",
+            }}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        {/* Desktop controls (always visible) + mobile collapsible */}
+        <div
+          className={`blog-controls${showMobileControls ? " blog-controls-open" : ""}`}
+        >
+          <SortToggle sort={sort} onSortChange={setSort} />
+
+          {/* Category filter */}
+          {allCategories.length > 0 && (
+            <div className="category-filter">
+              <button
+                className={`category-filter-btn${selectedCategory ? " category-filter-btn-active" : ""}`}
+                id="category-filter-btn"
+                onClick={() => setShowCategoryDropdown((v) => !v)}
+                aria-expanded={showCategoryDropdown}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                  <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+                {selectedCategory ? selectedCategory : "Category"}
+                {selectedCategory && (
+                  <span
+                    className="category-clear"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedCategory(null);
+                      setShowCategoryDropdown(false);
+                    }}
+                    title="Clear filter"
+                  >
+                    ✕
+                  </span>
+                )}
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    transform: showCategoryDropdown
+                      ? "rotate(180deg)"
+                      : "rotate(0deg)",
+                    transition: "transform 0.2s ease",
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {showCategoryDropdown && (
+                <div className="category-dropdown" id="category-dropdown">
+                  <button
+                    className={`category-dropdown-item${!selectedCategory ? " category-dropdown-item-active" : ""}`}
+                    onClick={() => {
+                      setSelectedCategory(null);
+                      setShowCategoryDropdown(false);
+                    }}
+                  >
+                    All Categories
+                  </button>
+                  {allCategories.map((cat) => (
+                    <button
+                      key={cat}
+                      className={`category-dropdown-item${selectedCategory === cat ? " category-dropdown-item-active" : ""}`}
+                      onClick={() => {
+                        setSelectedCategory(cat);
+                        setShowCategoryDropdown(false);
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Active category badge */}
+      {selectedCategory && (
+        <div className="active-category-bar">
+          <span className="active-category-label">
+            Showing:&nbsp;<strong>{selectedCategory}</strong>
+          </span>
+          <button
+            className="active-category-clear"
+            onClick={() => setSelectedCategory(null)}
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {filteredPosts.length === 0 ? (
         <div className="blog-list-empty">
-          <p>No posts found{searchQuery ? ` for "${searchQuery}"` : ""}.</p>
+          <p>No posts found{searchQuery ? ` for "${searchQuery}"` : ""}{selectedCategory ? ` in "${selectedCategory}"` : ""}.</p>
         </div>
       ) : (
         <div className="blog-list-groups">
