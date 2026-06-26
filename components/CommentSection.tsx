@@ -281,7 +281,7 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
                     : undefined
                 }
                 onDelete={
-                  session?.user?.id && comment.user.id === session.user.id
+                  session?.user?.id
                     ? handleDeleteComment
                     : undefined
                 }
