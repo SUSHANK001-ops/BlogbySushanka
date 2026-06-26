@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
       content: content.trim(),
       user: { connect: { id: userId } },
       ...(parentCommentId
-        ? { parentComment: { connect: { id: parentCommentId } } }
+        ? { parentCommentId, parentComment: { connect: { id: parentCommentId } } }
         : {}),
     };
 
