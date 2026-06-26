@@ -8,13 +8,29 @@ const commentInclude = {
   _count: { select: { likes: true } },
 } as const;
 
-type CommentWithRelations = Awaited<
-  ReturnType<typeof prisma.comment.findMany>
->[number] & {
-  replies?: CommentWithRelations[];
+type CommentRow = {
+  id: string;
+  postSlug: string;
+  content: string;
+  createdAt: Date;
+  userId: string;
+  parentCommentId: string | null;
+  user: {
+    id: string;
+    name: string;
+    image: string | null;
+    provider: string;
+  };
+  _count: {
+    likes: number;
+  };
 };
 
-function buildCommentTree(comments: Awaited<ReturnType<typeof prisma.comment.findMany>>) {
+type CommentWithReplies = CommentRow & {
+  replies?: CommentWithReplies[];
+};
+
+function buildCommentTree(comments: CommentRow[]): CommentWithReplies[] {
   const repliesByParent = new Map<string, typeof comments>();
   const rootComments: typeof comments = [];
 
@@ -47,9 +63,9 @@ export async function GET(req: NextRequest) {
     where: { postSlug: slug },
     include: commentInclude,
     orderBy: { createdAt: "desc" },
-  });
+  }) as CommentRow[];
 
-  return NextResponse.json(buildCommentTree(comments) as CommentWithRelations[]);
+  return NextResponse.json(buildCommentTree(comments));
 }
 
 // POST /api/comments { postSlug, content, parentCommentId? }
