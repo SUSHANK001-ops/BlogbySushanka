@@ -44,6 +44,7 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchComments = useCallback(async () => {
     try {
@@ -150,10 +151,12 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
     }
   };
 
-  const handleDeleteComment = async (commentId: string) => {
-    if (!window.confirm("Are you sure you want to delete this comment?")) {
-      return;
-    }
+  const requestDeleteComment = (commentId: string) => {
+    setDeleteConfirmId(commentId);
+  };
+
+  const executeDelete = async (commentId: string) => {
+    setDeleteConfirmId(null);
     try {
       const res = await fetch("/api/comments", {
         method: "DELETE",
@@ -282,7 +285,7 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
                 }
                 onDelete={
                   session?.user?.id
-                    ? handleDeleteComment
+                    ? requestDeleteComment
                     : undefined
                 }
               />
@@ -325,6 +328,34 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
           ))
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="confirm-modal-overlay">
+          <div className="confirm-modal">
+            <h3 className="confirm-modal-title">Delete Comment</h3>
+            <p className="confirm-modal-text">
+              Are you sure you want to delete this comment? This action cannot be undone.
+            </p>
+            <div className="confirm-modal-actions">
+              <button
+                type="button"
+                className="confirm-cancel-btn"
+                onClick={() => setDeleteConfirmId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="confirm-delete-btn"
+                onClick={() => executeDelete(deleteConfirmId)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -54,23 +54,28 @@ export default async function PostPage({ params }: PostPageProps) {
     day: "numeric",
   });
 
+  const displayLabels = post.labels.filter((l) => {
+    const lower = l.toLowerCase();
+    return lower !== "pin" && !lower.startsWith("pin:");
+  });
+
   return (
     <article className="post-page">
       <div className="post-layout">
         {/* Main Content — Left Column */}
         <div className="post-main">
           {/* Breadcrumb */}
-          {post.labels.length > 0 && (
+          {displayLabels.length > 0 && (
             <nav className="post-breadcrumb" aria-label="Breadcrumb">
               <Link href="/" className="breadcrumb-link">
                 Home
               </Link>
               <span className="breadcrumb-separator">/</span>
               <Link
-                href={`/label/${encodeURIComponent(post.labels[0])}`}
+                href={`/label/${encodeURIComponent(displayLabels[0])}`}
                 className="breadcrumb-link"
               >
-                {post.labels[0]}
+                {displayLabels[0]}
               </Link>
             </nav>
           )}
@@ -99,7 +104,7 @@ export default async function PostPage({ params }: PostPageProps) {
 
             {/* Labels */}
             <div className="post-labels">
-              {post.labels.map((label) => (
+              {displayLabels.map((label) => (
                 <Link
                   key={label}
                   href={`/label/${encodeURIComponent(label)}`}
