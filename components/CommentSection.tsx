@@ -151,6 +151,9 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
   };
 
   const handleDeleteComment = async (commentId: string) => {
+    if (!window.confirm("Are you sure you want to delete this comment?")) {
+      return;
+    }
     try {
       const res = await fetch("/api/comments", {
         method: "DELETE",
@@ -253,41 +256,7 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
         </div>
       </form>
 
-      {replyTo && session?.user?.id && replyTo.user.provider !== "anonymous" && (
-        <form onSubmit={handleReplySubmit} className="comment-form comment-reply-form">
-          <div className="comment-form-header">
-            <div className="comment-form-user">
-              <span className="comment-form-name">Replying to {replyTo.user.name}</span>
-            </div>
-          </div>
-          <textarea
-            value={replyContent}
-            onChange={(e) => setReplyContent(e.target.value)}
-            placeholder={`Reply to ${replyTo.user.name}...`}
-            className="comment-input"
-            rows={3}
-          />
-          <div className="comment-form-footer comment-reply-footer">
-            <button
-              type="button"
-              className="comment-cancel"
-              onClick={() => {
-                setReplyTo(null);
-                setReplyContent("");
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!replyContent.trim() || isReplying}
-              className="comment-submit"
-            >
-              {isReplying ? "Replying..." : "Post Reply"}
-            </button>
-          </div>
-        </form>
-      )}
+      
 
       {/* Comment List */}
       <div className="comment-list">
@@ -297,26 +266,62 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
           </p>
         ) : (
           comments.map((comment) => (
-            <CommentItem
-              key={comment.id}
-              comment={comment}
-              postSlug={postSlug}
-              isLiked={likesData.userCommentLikes.includes(comment.id)}
-              likeCount={likesData.commentLikeCounts[comment.id] ?? 0}
-              currentUserId={session?.user?.id ?? null}
-              userCommentLikes={likesData.userCommentLikes}
-              commentLikeCounts={likesData.commentLikeCounts}
-              onReply={
-                session?.user?.id && comment.user.provider !== "anonymous"
-                  ? () => setReplyTo(comment)
-                  : undefined
-              }
-              onDelete={
-                session?.user?.id && comment.user.id === session.user.id
-                  ? handleDeleteComment
-                  : undefined
-              }
-            />
+            <> 
+              <CommentItem
+                comment={comment}
+                postSlug={postSlug}
+                isLiked={likesData.userCommentLikes.includes(comment.id)}
+                likeCount={likesData.commentLikeCounts[comment.id] ?? 0}
+                currentUserId={session?.user?.id ?? null}
+                userCommentLikes={likesData.userCommentLikes}
+                commentLikeCounts={likesData.commentLikeCounts}
+                onReply={
+                  session?.user?.id && comment.user.provider !== "anonymous"
+                    ? () => setReplyTo(comment)
+                    : undefined
+                }
+                onDelete={
+                  session?.user?.id && comment.user.id === session.user.id
+                    ? handleDeleteComment
+                    : undefined
+                }
+              />
+              {replyTo?.id === comment.id && (
+                <form onSubmit={handleReplySubmit} className="comment-form comment-reply-form">
+                  <div className="comment-form-header">
+                    <div className="comment-form-user">
+                      <span className="comment-form-name">Replying to {replyTo.user.name}</span>
+                    </div>
+                  </div>
+                  <textarea
+                    value={replyContent}
+                    onChange={(e) => setReplyContent(e.target.value)}
+                    placeholder={`Reply to ${replyTo.user.name}...`}
+                    className="comment-input"
+                    rows={3}
+                  />
+                  <div className="comment-form-footer comment-reply-footer">
+                    <button
+                      type="button"
+                      className="comment-cancel"
+                      onClick={() => {
+                        setReplyTo(null);
+                        setReplyContent("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!replyContent.trim() || isReplying}
+                      className="comment-submit"
+                    >
+                      {isReplying ? "Replying..." : "Post Reply"}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </>
           ))
         )}
       </div>
