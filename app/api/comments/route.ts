@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { generateAnonymousName } from "@/lib/name-generator";
@@ -106,13 +107,17 @@ export async function POST(req: NextRequest) {
     userId = anonUser.id;
   }
 
+  const commentData: Prisma.CommentCreateInput = {
+    postSlug,
+    content: content.trim(),
+    user: { connect: { id: userId } },
+    ...(parentCommentId
+      ? { parentComment: { connect: { id: parentCommentId } } }
+      : {}),
+  };
+
   const comment = await prisma.comment.create({
-    data: {
-      postSlug,
-      content: content.trim(),
-      userId,
-      parentCommentId: parentCommentId ?? null,
-    },
+    data: commentData,
     include: commentInclude,
   });
 
