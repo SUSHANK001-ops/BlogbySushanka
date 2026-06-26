@@ -71,57 +71,79 @@ export async function GET(req: NextRequest) {
 
 // POST /api/comments { postSlug, content, parentCommentId? }
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { postSlug, content, parentCommentId } = body;
+  try {
+    const body = await req.json();
+    const { postSlug, content, parentCommentId } = body;
 
-  if (!postSlug || !content?.trim()) {
-    return NextResponse.json(
-      { error: "Missing postSlug or content" },
-      { status: 400 }
-    );
-  }
-
-  const session = await auth();
-  let userId: string;
-
-  if (session?.user?.id) {
-    // Authenticated user
-    userId = session.user.id;
-  } else {
-    if (parentCommentId) {
+    if (!postSlug || !content?.trim()) {
       return NextResponse.json(
-        { error: "Guests cannot reply to comments" },
-        { status: 403 }
+        { error: "Missing postSlug or content" },
+        { status: 400 }
       );
     }
 
-    // Anonymous user — create a temporary user record
-    const anonName = generateAnonymousName();
-    const anonUser = await prisma.user.create({
-      data: {
-        name: anonName,
-        email: `anon-${Date.now()}-${Math.random().toString(36).slice(2)}@anonymous.local`,
-        provider: "anonymous",
-      },
+    const session = await auth();
+    let userId: string;
+
+    if (session?.user?.id) {
+      // Authenticated user
+      userId = session.user.id;
+    } else {
+      if (parentCommentId) {
+        return NextResponse.json(
+          { error: "Guests cannot reply to comments" },
+          { status: 403 }
+        );
+      }
+
+      // Anonymous user — create a temporary user record
+      const anonName = generateAnonymousName();
+      const anonUser = await prisma.user.create({
+        data: {
+          name: anonName,
+          email: `anon-${Date.now()}-${Math.random().toString(36).slice(2)}@anonymous.local`,
+          provider: "anonymous",
+        },
+      });
+      userId = anonUser.id;
+    }
+
+    if (parentCommentId) {
+      const parentComment = await prisma.comment.findFirst({
+        where: { id: parentCommentId, postSlug },
+        select: { id: true },
+      });
+
+      if (!parentComment) {
+        return NextResponse.json(
+          { error: "Parent comment not found" },
+          { status: 404 }
+        );
+      }
+    }
+
+    const commentData: Prisma.CommentCreateInput = {
+      postSlug,
+      content: content.trim(),
+      user: { connect: { id: userId } },
+      ...(parentCommentId
+        ? { parentComment: { connect: { id: parentCommentId } } }
+        : {}),
+    };
+
+    const comment = await prisma.comment.create({
+      data: commentData,
+      include: commentInclude,
     });
-    userId = anonUser.id;
+
+    return NextResponse.json(comment, { status: 201 });
+  } catch (error) {
+    console.error("Failed to create comment:", error);
+    return NextResponse.json(
+      { error: "Failed to create comment" },
+      { status: 500 }
+    );
   }
-
-  const commentData: Prisma.CommentCreateInput = {
-    postSlug,
-    content: content.trim(),
-    user: { connect: { id: userId } },
-    ...(parentCommentId
-      ? { parentComment: { connect: { id: parentCommentId } } }
-      : {}),
-  };
-
-  const comment = await prisma.comment.create({
-    data: commentData,
-    include: commentInclude,
-  });
-
-  return NextResponse.json(comment, { status: 201 });
 }
 
 // DELETE /api/comments { commentId }
