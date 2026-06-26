@@ -13,6 +13,16 @@ export function PostCard({ post }: PostCardProps) {
     day: "numeric",
   });
 
+  const isPinned = post.labels.some((l) => {
+    const lower = l.toLowerCase();
+    return lower === "pin" || lower.startsWith("pin:");
+  });
+
+  const displayLabels = post.labels.filter((l) => {
+    const lower = l.toLowerCase();
+    return lower !== "pin" && !lower.startsWith("pin:");
+  });
+
   return (
     <Link href={`/posts/${post.slug}`} className="post-card" id={`post-${post.slug}`}>
       {post.thumbnail && (
@@ -36,11 +46,17 @@ export function PostCard({ post }: PostCardProps) {
           <span className="post-card-reading-time">
             {post.readingTime} min read
           </span>
-          {post.labels.length > 0 && (
+          {isPinned && (
+            <>
+              <span className="post-card-dot">·</span>
+              <span className="post-card-pinned-badge">📌 Pinned</span>
+            </>
+          )}
+          {displayLabels.length > 0 && (
             <>
               <span className="post-card-dot">·</span>
               <div className="post-card-labels">
-                {post.labels.slice(0, 3).map((label) => (
+                {displayLabels.slice(0, 3).map((label) => (
                   <span key={label} className="post-card-label">
                     {label}
                   </span>

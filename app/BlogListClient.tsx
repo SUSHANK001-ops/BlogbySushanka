@@ -6,6 +6,18 @@ import { PostCard } from "@/components/PostCard";
 import { SearchBar } from "@/components/SearchBar";
 import { SortToggle } from "@/components/SortToggle";
 
+function getPinLevel(labels: string[]): number | null {
+  for (const label of labels) {
+    const lower = label.toLowerCase();
+    if (lower.startsWith('pin:')) {
+      const level = parseInt(lower.replace('pin:', ''), 10);
+      if (!isNaN(level)) return level;
+    }
+  }
+  if (labels.some(l => l.toLowerCase() === 'pin')) return 9999;
+  return null;
+}
+
 interface BlogListClientProps {
   posts: BlogPost[];
 }
@@ -60,10 +72,30 @@ export function BlogListClient({ posts }: BlogListClientProps) {
     return filtered;
   }, [posts, searchQuery, sort, selectedCategory]);
 
-  // Group posts by year
+  // Group posts by year, with Pinned posts separated at the top
   const groupedPosts = useMemo(() => {
-    const groups: Record<string, BlogPost[]> = {};
+    const pinnedPosts: BlogPost[] = [];
+    const regularPosts: BlogPost[] = [];
+
     filteredPosts.forEach((post) => {
+      if (getPinLevel(post.labels) !== null) {
+        pinnedPosts.push(post);
+      } else {
+        regularPosts.push(post);
+      }
+    });
+
+    pinnedPosts.sort((a, b) => {
+      const pinA = getPinLevel(a.labels)!;
+      const pinB = getPinLevel(b.labels)!;
+      if (pinA !== pinB) return pinA - pinB;
+      const dateA = new Date(a.published).getTime();
+      const dateB = new Date(b.published).getTime();
+      return sort === "newest" ? dateB - dateA : dateA - dateB;
+    });
+
+    const groups: Record<string, BlogPost[]> = {};
+    regularPosts.forEach((post) => {
       const year = new Date(post.published).getFullYear().toString();
       if (!groups[year]) groups[year] = [];
       groups[year].push(post);
@@ -74,7 +106,13 @@ export function BlogListClient({ posts }: BlogListClientProps) {
       sort === "newest" ? Number(b) - Number(a) : Number(a) - Number(b)
     );
 
-    return sortedYears.map((year) => ({ year, posts: groups[year] }));
+    const result = [];
+    if (pinnedPosts.length > 0) {
+      result.push({ year: "Pinned", posts: pinnedPosts });
+    }
+    result.push(...sortedYears.map((year) => ({ year, posts: groups[year] })));
+
+    return result;
   }, [filteredPosts, sort]);
 
   return (
