@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { CommentItem } from "@/components/CommentItem";
+import { CommentItem, CommentNode } from "@/components/CommentItem";
 import { LikeButton } from "@/components/LikeButton";
 
 interface CommentUser {
@@ -12,13 +12,10 @@ interface CommentUser {
   provider: string;
 }
 
-interface Comment {
-  id: string;
-  postSlug: string;
-  content: string;
-  createdAt: string;
-  user: CommentUser;
-  _count: { likes: number };
+interface Comment extends CommentNode {
+  postSlug?: string;
+  parentCommentId?: string | null;
+  replies?: Comment[];
 }
 
 interface LikesData {
@@ -42,7 +39,10 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
     userCommentLikes: [],
   });
   const [content, setContent] = useState("");
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  const [replyContent, setReplyContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReplying, setIsReplying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchComments = useCallback(async () => {
@@ -96,6 +96,81 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
       console.error("Failed to post comment:", error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleReplySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyTo || !replyContent.trim() || isReplying) return;
+
+    if (!session?.user?.id || replyTo.user.provider === "anonymous") {
+      return;
+    }
+
+    setIsReplying(true);
+    try {
+      const res = await fetch("/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postSlug,
+          content: replyContent.trim(),
+          parentCommentId: replyTo.id,
+        }),
+      });
+
+      if (res.ok) {
+        const newReply = await res.json();
+
+        const insertReply = (items: Comment[]): Comment[] =>
+          items.map((comment) => {
+            if (comment.id === replyTo.id) {
+              return {
+                ...comment,
+                replies: [...(comment.replies ?? []), newReply],
+              };
+            }
+
+            return {
+              ...comment,
+              replies: comment.replies?.length ? insertReply(comment.replies) : [],
+            };
+          });
+
+        setComments((prev) =>
+          insertReply(prev)
+        );
+        setReplyTo(null);
+        setReplyContent("");
+      }
+    } catch (error) {
+      console.error("Failed to post reply:", error);
+    } finally {
+      setIsReplying(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      const res = await fetch("/api/comments", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId }),
+      });
+
+      if (res.ok) {
+        const removeComment = (items: Comment[]): Comment[] =>
+          items
+            .filter((comment) => comment.id !== commentId)
+            .map((comment) => ({
+              ...comment,
+              replies: comment.replies?.length ? removeComment(comment.replies) : [],
+            }));
+
+        setComments((prev) => removeComment(prev));
+      }
+    } catch (error) {
+      console.error("Failed to delete comment:", error);
     }
   };
 
@@ -178,6 +253,42 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
         </div>
       </form>
 
+      {replyTo && session?.user?.id && replyTo.user.provider !== "anonymous" && (
+        <form onSubmit={handleReplySubmit} className="comment-form comment-reply-form">
+          <div className="comment-form-header">
+            <div className="comment-form-user">
+              <span className="comment-form-name">Replying to {replyTo.user.name}</span>
+            </div>
+          </div>
+          <textarea
+            value={replyContent}
+            onChange={(e) => setReplyContent(e.target.value)}
+            placeholder={`Reply to ${replyTo.user.name}...`}
+            className="comment-input"
+            rows={3}
+          />
+          <div className="comment-form-footer comment-reply-footer">
+            <button
+              type="button"
+              className="comment-cancel"
+              onClick={() => {
+                setReplyTo(null);
+                setReplyContent("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!replyContent.trim() || isReplying}
+              className="comment-submit"
+            >
+              {isReplying ? "Replying..." : "Post Reply"}
+            </button>
+          </div>
+        </form>
+      )}
+
       {/* Comment List */}
       <div className="comment-list">
         {comments.length === 0 ? (
@@ -192,6 +303,19 @@ export function CommentSection({ postSlug }: CommentSectionProps) {
               postSlug={postSlug}
               isLiked={likesData.userCommentLikes.includes(comment.id)}
               likeCount={likesData.commentLikeCounts[comment.id] ?? 0}
+              currentUserId={session?.user?.id ?? null}
+              userCommentLikes={likesData.userCommentLikes}
+              commentLikeCounts={likesData.commentLikeCounts}
+              onReply={
+                session?.user?.id && comment.user.provider !== "anonymous"
+                  ? () => setReplyTo(comment)
+                  : undefined
+              }
+              onDelete={
+                session?.user?.id && comment.user.id === session.user.id
+                  ? handleDeleteComment
+                  : undefined
+              }
             />
           ))
         )}

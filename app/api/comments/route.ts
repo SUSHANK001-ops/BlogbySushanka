@@ -3,6 +3,39 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { generateAnonymousName } from "@/lib/name-generator";
 
+const commentInclude = {
+  user: { select: { id: true, name: true, image: true, provider: true } },
+  _count: { select: { likes: true } },
+} as const;
+
+type CommentWithRelations = Awaited<
+  ReturnType<typeof prisma.comment.findMany>
+>[number] & {
+  replies?: CommentWithRelations[];
+};
+
+function buildCommentTree(comments: Awaited<ReturnType<typeof prisma.comment.findMany>>) {
+  const repliesByParent = new Map<string, typeof comments>();
+  const rootComments: typeof comments = [];
+
+  for (const comment of comments) {
+    if (comment.parentCommentId) {
+      const replyList = repliesByParent.get(comment.parentCommentId) ?? [];
+      replyList.push(comment);
+      repliesByParent.set(comment.parentCommentId, replyList);
+    } else {
+      rootComments.push(comment);
+    }
+  }
+
+  return rootComments.map((comment) => ({
+    ...comment,
+    replies: (repliesByParent.get(comment.id) ?? []).sort(
+      (left, right) => left.createdAt.getTime() - right.createdAt.getTime()
+    ),
+  }));
+}
+
 // GET /api/comments?slug=<postSlug>
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("slug");
@@ -12,20 +45,17 @@ export async function GET(req: NextRequest) {
 
   const comments = await prisma.comment.findMany({
     where: { postSlug: slug },
-    include: {
-      user: { select: { id: true, name: true, image: true, provider: true } },
-      _count: { select: { likes: true } },
-    },
+    include: commentInclude,
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(comments);
+  return NextResponse.json(buildCommentTree(comments) as CommentWithRelations[]);
 }
 
-// POST /api/comments { postSlug, content }
+// POST /api/comments { postSlug, content, parentCommentId? }
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { postSlug, content } = body;
+  const { postSlug, content, parentCommentId } = body;
 
   if (!postSlug || !content?.trim()) {
     return NextResponse.json(
@@ -41,6 +71,13 @@ export async function POST(req: NextRequest) {
     // Authenticated user
     userId = session.user.id;
   } else {
+    if (parentCommentId) {
+      return NextResponse.json(
+        { error: "Guests cannot reply to comments" },
+        { status: 403 }
+      );
+    }
+
     // Anonymous user — create a temporary user record
     const anonName = generateAnonymousName();
     const anonUser = await prisma.user.create({
@@ -58,12 +95,53 @@ export async function POST(req: NextRequest) {
       postSlug,
       content: content.trim(),
       userId,
+      parentCommentId: parentCommentId ?? null,
     },
-    include: {
-      user: { select: { id: true, name: true, image: true, provider: true } },
-      _count: { select: { likes: true } },
-    },
+    include: commentInclude,
   });
 
   return NextResponse.json(comment, { status: 201 });
+}
+
+// DELETE /api/comments { commentId }
+export async function DELETE(req: NextRequest) {
+  const body = await req.json();
+  const { commentId } = body;
+
+  if (!commentId) {
+    return NextResponse.json({ error: "Missing commentId" }, { status: 400 });
+  }
+
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: {
+      id: true,
+      userId: true,
+      user: { select: { provider: true } },
+    },
+  });
+
+  if (!comment) {
+    return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+  }
+
+  if (comment.user.provider === "anonymous") {
+    return NextResponse.json(
+      { error: "Guest comments cannot be deleted" },
+      { status: 403 }
+    );
+  }
+
+  if (comment.userId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  await prisma.comment.delete({ where: { id: commentId } });
+
+  return NextResponse.json({ success: true });
 }

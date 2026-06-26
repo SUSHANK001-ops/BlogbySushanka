@@ -9,17 +9,25 @@ interface CommentUser {
   provider: string;
 }
 
+export interface CommentNode {
+  id: string;
+  content: string;
+  createdAt: string;
+  user: CommentUser;
+  _count: { likes: number };
+  replies?: CommentNode[];
+}
+
 interface CommentItemProps {
-  comment: {
-    id: string;
-    content: string;
-    createdAt: string;
-    user: CommentUser;
-    _count: { likes: number };
-  };
+  comment: CommentNode;
   postSlug: string;
   isLiked: boolean;
   likeCount: number;
+  currentUserId: string | null;
+  userCommentLikes: string[];
+  commentLikeCounts: Record<string, number>;
+  onReply?: (comment: CommentNode) => void;
+  onDelete?: (commentId: string) => void;
 }
 
 function getInitial(name: string): string {
@@ -51,47 +59,93 @@ export function CommentItem({
   postSlug,
   isLiked,
   likeCount,
+  currentUserId,
+  userCommentLikes,
+  commentLikeCounts,
+  onReply,
+  onDelete,
 }: CommentItemProps) {
   const isAnonymous = comment.user.provider === "anonymous";
+  const canReply = !!currentUserId && !isAnonymous;
+  const canDelete = !!currentUserId && comment.user.id === currentUserId && !isAnonymous;
 
   return (
-    <div className="comment-item" id={`comment-${comment.id}`}>
-      <div className="comment-avatar">
-        {comment.user.image ? (
-          <img
-            src={comment.user.image}
-            alt={comment.user.name}
-            className="comment-avatar-img"
-          />
-        ) : (
-          <div className="comment-avatar-fallback">
-            {getInitial(comment.user.name)}
+    <div className="comment-thread" id={`comment-${comment.id}`}>
+      <div className="comment-item">
+        <div className="comment-avatar">
+          {comment.user.image ? (
+            <img
+              src={comment.user.image}
+              alt={comment.user.name}
+              className="comment-avatar-img"
+            />
+          ) : (
+            <div className="comment-avatar-fallback">
+              {getInitial(comment.user.name)}
+            </div>
+          )}
+        </div>
+        <div className="comment-body">
+          <div className="comment-header">
+            <span className="comment-author">
+              {comment.user.name}
+              {isAnonymous && (
+                <span className="comment-anon-badge">Guest</span>
+              )}
+            </span>
+            <span className="comment-date">
+              {relativeTime(comment.createdAt)}
+            </span>
           </div>
-        )}
-      </div>
-      <div className="comment-body">
-        <div className="comment-header">
-          <span className="comment-author">
-            {comment.user.name}
-            {isAnonymous && (
-              <span className="comment-anon-badge">Guest</span>
+          <p className="comment-text">{comment.content}</p>
+          <div className="comment-actions">
+            <LikeButton
+              type="comment"
+              postSlug={postSlug}
+              commentId={comment.id}
+              initialCount={likeCount}
+              initialLiked={isLiked}
+            />
+            {canReply && onReply && (
+              <button
+                type="button"
+                className="comment-action-btn"
+                onClick={() => onReply(comment)}
+              >
+                Reply
+              </button>
             )}
-          </span>
-          <span className="comment-date">
-            {relativeTime(comment.createdAt)}
-          </span>
-        </div>
-        <p className="comment-text">{comment.content}</p>
-        <div className="comment-actions">
-          <LikeButton
-            type="comment"
-            postSlug={postSlug}
-            commentId={comment.id}
-            initialCount={likeCount}
-            initialLiked={isLiked}
-          />
+            {canDelete && onDelete && (
+              <button
+                type="button"
+                className="comment-action-btn comment-delete-btn"
+                onClick={() => onDelete(comment.id)}
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      {comment.replies?.length ? (
+        <div className="comment-replies">
+          {comment.replies.map((reply) => (
+            <CommentItem
+              key={reply.id}
+              comment={reply}
+              postSlug={postSlug}
+              isLiked={userCommentLikes.includes(reply.id)}
+              likeCount={commentLikeCounts[reply.id] ?? reply._count.likes}
+              currentUserId={currentUserId}
+              userCommentLikes={userCommentLikes}
+              commentLikeCounts={commentLikeCounts}
+              onReply={onReply}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
