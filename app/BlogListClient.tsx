@@ -36,7 +36,14 @@ export function BlogListClient({ posts }: BlogListClientProps) {
   // Collect all unique labels from posts
   const allCategories = useMemo(() => {
     const labelSet = new Set<string>();
-    posts.forEach((p) => p.labels.forEach((l) => labelSet.add(l)));
+    posts.forEach((p) =>
+      p.labels.forEach((l) => {
+        const lower = l.toLowerCase();
+        if (lower !== "pin" && !lower.startsWith("pin:")) {
+          labelSet.add(l);
+        }
+      })
+    );
     return Array.from(labelSet).sort();
   }, [posts]);
 
